@@ -1,7 +1,7 @@
 *.xml
 *.txt
 *.jpg
-*.zip
+#*.zip
 *.yaml
 *.png
 *.cache
