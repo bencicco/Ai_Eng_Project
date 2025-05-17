@@ -4,6 +4,7 @@ from PIL import Image, ImageTk
 import cv2
 from ultralytics import YOLO
 import threading
+import time
 
 # Load YOLO model
 model = YOLO('runs\\detect\\train27\\weights\\best.pt')
@@ -58,6 +59,10 @@ class YOLO_GUI:
         self.cap = None
         self.running = False
 
+        self.limit_fps = False
+        self.target_fps = 30
+        self.frame_duration = 1.0/self.target_fps
+
     def upload_image(self):
         self.stop_camera()
         file_path = filedialog.askopenfilename(filetypes=[("Image Files", "*.jpg *.jpeg *.png")])
@@ -87,12 +92,17 @@ class YOLO_GUI:
     def camera_loop(self):
         while self.running and self.cap.isOpened():
             ret, frame = self.cap.read()
+            frame_start = time.perf_counter()
             if not ret:
                 break
             frame = cv2.flip(frame, 1)
             annotated_frame, results = annotate_frame(frame)
             self.display_image(annotated_frame)
             self.display_detections(results)
+            delta_time = time.perf_counter() - frame_start
+            sleep_time = self.frame_duration - delta_time
+            if sleep_time > 0 and self.limit_fps:
+                time.sleep(sleep_time)
         self.stop_camera()
 
     def display_image(self, bgr_img):
@@ -100,8 +110,11 @@ class YOLO_GUI:
         img_pil = Image.fromarray(rgb_img).resize((700, 500), Image.Resampling.LANCZOS)
         tk_img = ImageTk.PhotoImage(img_pil)
 
-        self.canvas.delete("all")
-        self.canvas.create_image(0, 0, anchor="nw", image=tk_img)
+        if not hasattr(self, 'image_id'):
+            self.image_id = self.canvas.create_image(0, 0, anchor="nw", image=tk_img)
+        else:
+            self.canvas.itemconfig(self.image_id, image=tk_img)
+        
         self.canvas.image = tk_img  # prevent GC
 
     def display_detections(self, result):
