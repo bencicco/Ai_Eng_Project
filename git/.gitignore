@@ -1,13 +1,7 @@
 *.xml
-data/images/train
-data/labels/train
-train.txt
-train_fixed.txt
-val_fixed.txt
-data/images/folder*
-folder*
-runs/detect
-#*.zip
+*.txt
+*.jpg
+*.zip
 *.yaml
 *.png
 *.cache
