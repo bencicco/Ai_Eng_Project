@@ -5,6 +5,7 @@ import cv2
 from ultralytics import YOLO
 import threading
 import time
+from inference_mp4 import annotate_video
 
 # Load YOLO model
 model = YOLO('runs\\detect\\train27\\weights\\best.pt')
@@ -40,6 +41,9 @@ class YOLO_GUI:
         self.upload_button = tk.Button(self.left_frame, text="Upload Image", command=self.upload_image)
         self.upload_button.pack(side=tk.LEFT, padx=5, pady=10)
 
+        self.upload_button = tk.Button(self.left_frame, text="Upload Video", command=self.upload_video)
+        self.upload_button.pack(side=tk.LEFT, padx=5, pady=10)
+
         self.cam_button = tk.Button(self.left_frame, text="Start Camera", command=self.start_camera)
         self.cam_button.pack(side=tk.LEFT, padx=5)
 
@@ -71,6 +75,15 @@ class YOLO_GUI:
         annotated_img, results = annotate_image(file_path)
         self.display_image(annotated_img)
         self.display_detections(results)
+    
+    def upload_video(self):
+        self.stop_camera()
+        file_path = filedialog.askopenfilename(filetypes=[("Video Files", "*.mp4 *.MOV *.AVI")])
+        if not file_path:
+            return
+        output_path, frame_idx = annotate_video(model=model, input_path=file_path)
+        print(output_path, frame_idx)
+        
 
     def start_camera(self):
         if self.running:

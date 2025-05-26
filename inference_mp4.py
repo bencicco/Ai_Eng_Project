@@ -37,15 +37,13 @@ def draw_boxes(frame, results, names):
         cv2.putText(frame, label, (x1, y1 - 2), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 1, cv2.LINE_AA)
     return frame
 
-# ───────────────────────── Main ───────────────────────────────
 
-def main():
-    model = YOLO(str(MODEL_WEIGHTS))
+def annotate_video(model, input_path, output_path = OUTPUT_VIDEO):
     names = model.names
 
     cap = cv2.VideoCapture(str(SOURCE_VIDEO))
     if not cap.isOpened():
-        raise FileNotFoundError(f"Cannot open video {SOURCE_VIDEO}")
+        return output_path, 0
 
     width  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -67,7 +65,17 @@ def main():
 
     cap.release()
     out.release()
+    return output_path, frame_idx
+
+# ───────────────────────── Main ───────────────────────────────
+
+def main():
+    model = YOLO(str(MODEL_WEIGHTS))
+    
+
+    _,frame_idx = annotate_video(model, SOURCE_VIDEO)
     print(f"Finished! Saved annotated video to {OUTPUT_VIDEO} (processed {frame_idx} frames).")
+
 
 if __name__ == "__main__":
     main()
