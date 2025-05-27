@@ -75,14 +75,24 @@ class YOLO_GUI:
         self.upload_button = tk.Button(self.left_frame, text="Upload Image", command=self.upload_image)
         self.upload_button.pack(side=tk.LEFT, padx=5, pady=10)
 
-        self.upload_button = tk.Button(self.left_frame, text="Upload Video", command=self.upload_video)
-        self.upload_button.pack(side=tk.LEFT, padx=5, pady=10)
+        self.upload_video_button = tk.Button(self.left_frame, text="Upload Video", command=self.upload_video)
+        self.upload_video_button.pack(side=tk.LEFT, padx=5, pady=10)
 
         self.cam_button = tk.Button(self.left_frame, text="Start Camera", command=self.start_camera)
         self.cam_button.pack(side=tk.LEFT, padx=5)
 
         self.stop_button = tk.Button(self.left_frame, text="Stop Camera", command=self.stop_camera, state=tk.DISABLED)
         self.stop_button.pack(side=tk.LEFT, padx=5)
+
+        # Video playback controls
+        self.video_controls_frame = tk.Frame(self.left_frame)
+        self.video_controls_frame.pack(pady=5)
+
+        self.play_pause_button = tk.Button(self.video_controls_frame, text="Play/Pause", command=self.toggle_video_playback, state=tk.DISABLED)
+        self.play_pause_button.pack(side=tk.LEFT, padx=5)
+
+        self.stop_video_button = tk.Button(self.video_controls_frame, text="Stop Video", command=self.stop_video, state=tk.DISABLED)
+        self.stop_video_button.pack(side=tk.LEFT, padx=5)
 
         # --- Get filters --- 
         self.filter_frame = tk.Frame(self.right_frame)
@@ -131,6 +141,14 @@ class YOLO_GUI:
         self.target_fps = 30
         self.frame_duration = 1.0/self.target_fps
 
+        # Video playback variables
+        self.video_cap = None
+        self.video_playing = False
+        self.video_paused = False
+        self.total_frames = 0
+        self.current_frame_num = 0
+        self.video_fps = 30
+
         # --- class filtering --- 
         self.class_vars = {}  # --- stores checkbox values --- 
         self.current_results = None  # --- current checkbox values --- 
@@ -158,7 +176,7 @@ class YOLO_GUI:
             checkbox.pack(anchor="w")
 
     def get_visible_classes(self):
-        return [class_name for class_name, var in self.class_vars.items() if var.get()]
+        return [class_name for class_name, var in list(self.class_vars.items()) if var.get()]
 
     def on_class_filter_change(self):
         visible_classes = self.get_visible_classes()
@@ -188,6 +206,7 @@ class YOLO_GUI:
 
     def upload_image(self):
         self.stop_camera()
+        self.stop_video()
         file_path = filedialog.askopenfilename(filetypes=[("Image Files", "*.jpg *.jpeg *.png")])
         if not file_path:
             return
@@ -215,16 +234,113 @@ class YOLO_GUI:
     
     def upload_video(self):
         self.stop_camera()
+        self.stop_video()
         file_path = filedialog.askopenfilename(filetypes=[("Video Files", "*.mp4 *.MOV *.AVI")])
         if not file_path:
             return
-        output_path, frame_idx = annotate_video(model=model, input_path=file_path)
-        print(output_path, frame_idx)
         
+        # Initialize video capture
+        self.video_cap = cv2.VideoCapture(file_path)
+        self.total_frames = int(self.video_cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        self.video_fps = self.video_cap.get(cv2.CAP_PROP_FPS)
+        
+        # Enable video controls
+        self.play_pause_button.config(state=tk.NORMAL)
+        self.stop_video_button.config(state=tk.NORMAL)
+        
+        # Reset playback state
+        self.video_playing = False
+        self.video_paused = False
+        self.current_frame_num = 0
+        
+        # Load first frame
+        self.seek_to_frame(0)
+        
+        print(f"Video loaded: {self.total_frames} frames at {self.video_fps} FPS")
+
+    def toggle_video_playback(self):
+        if not self.video_cap:
+            return
+            
+        if self.video_playing:
+            self.video_paused = not self.video_paused
+        else:
+            self.video_playing = True
+            self.video_paused = False
+            threading.Thread(target=self.video_playback_loop, daemon=True).start()
+
+    def stop_video(self):
+        self.video_playing = False
+        self.video_paused = False
+        if self.video_cap:
+            self.video_cap.release()
+            self.video_cap = None
+        
+        # Disable video controls
+        self.play_pause_button.config(state=tk.DISABLED)
+        self.stop_video_button.config(state=tk.DISABLED)
+        
+        # Clear current states
+        self.current_image_path = None
+        self.current_frame = None
+
+    def seek_video(self, value):
+        if not self.video_cap:
+            return
+        frame_num = int(value)
+        self.seek_to_frame(frame_num)
+
+    def seek_to_frame(self, frame_num):
+        if not self.video_cap:
+            return
+            
+        self.video_cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+        ret, frame = self.video_cap.read()
+        if ret:
+            self.current_frame_num = frame_num
+            
+            # Apply filtering and display
+            visible_classes = self.get_visible_classes()
+            annotated_frame, results = annotate_frame(frame, visible_classes)
+            
+            # Update detected classes
+            detected_classes = set()
+            if results and results.boxes:
+                for box in results.boxes:
+                    cls_id = int(box.cls[0])
+                    class_name = model.names[cls_id]
+                    detected_classes.add(class_name)
+            
+            # Update checkboxes if new classes detected
+            current_checkbox_classes = set(self.class_vars.keys())
+            if detected_classes != current_checkbox_classes and detected_classes:
+                current_states = {name: var.get() for name, var in list(self.class_vars.items())}
+                self.update_class_checkboxes(detected_classes)
+                for name, var in list(self.class_vars.items()):
+                    if name in current_states:
+                        var.set(current_states[name])
+            
+            self.display_image(annotated_frame)
+            self.display_detections(results)
+
+    def video_playback_loop(self):
+        frame_duration = 1.0 / self.video_fps if self.video_fps > 0 else 1.0/30
+        
+        while self.video_playing and self.video_cap:
+            if not self.video_paused:
+                if self.current_frame_num >= self.total_frames - 1:
+                    # End of video
+                    self.video_playing = False
+                    break
+                
+                self.seek_to_frame(self.current_frame_num + 1)
+            
+            time.sleep(frame_duration)
 
     def start_camera(self):
         if self.running:
             return
+        self.stop_video()
         self.running = True
         self.cap = cv2.VideoCapture(0)
         self.stop_button.config(state=tk.NORMAL)
@@ -267,10 +383,10 @@ class YOLO_GUI:
             current_checkbox_classes = set(self.class_vars.keys())
             if all_detected_classes != current_checkbox_classes:
                 # Preserve current checkbox states
-                current_states = {name: var.get() for name, var in self.class_vars.items()}
+                current_states = {name: var.get() for name, var in list(self.class_vars.items())}
                 self.update_class_checkboxes(all_detected_classes)
                 # --- restore previous states, new classes default to True --- 
-                for name, var in self.class_vars.items():
+                for name, var in list(self.class_vars.items()):
                     if name in current_states:
                         var.set(current_states[name])
             

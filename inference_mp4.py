@@ -13,9 +13,9 @@ import cv2
 from ultralytics import YOLO
 
 # ───────────────────────── Constants ──────────────────────────
-MODEL_WEIGHTS = Path("runs/detect/train27/weights/best.pt")  # path to .pt file
-SOURCE_VIDEO  = Path("IMG_8298.MOV")              # input video
-OUTPUT_VIDEO  = Path("embedded.mp4")    # output video
+MODEL_WEIGHTS = Path("best.pt")  # path to .pt file
+SOURCE_VIDEO  = Path("VIDEO_FOR_DEMO.MP4")              # input video
+OUTPUT_VIDEO  = Path("test.mp4")    # output video
 IMG_SIZE      = 640                                           # inference image size
 CONF_THRESHOLD = 0.20                                        # confidence threshold
 
